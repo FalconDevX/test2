@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Zagadnienie Pośrednika</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: #f8f9fa;
+            margin: 0;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: #f1f3f5;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 5px solid #6c757d;
+        }
+
+        .stat-box.profit {
+            background: #e8f5e9;
+            border-left-color: #2e7d32;
+        }
+
+        .stat-box.cost {
+            background: #ffebee;
+            border-left-color: #c62828;
+        }
+
+        .stat-box.revenue {
+            background: #e3f2fd;
+            border-left-color: #1565c0;
+        }
+
+        .stat-title {
+            font-size: 12px;
+            color: #555;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #212529;
+        }
+
+        #mynetwork {
+            height: 600px;
+            border: 2px solid #ccc;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            cursor: grab;
+        }
+
+        #mynetwork:active {
+            cursor: grabbing;
+        }
+
+        .input-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        .section-title {
+            margin-bottom: 8px;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 70px 90px 30px;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .receiver-row {
+            display: grid;
+            grid-template-columns: 1fr 70px 90px 30px;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        input {
+            padding: 7px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        button {
+            padding: 9px 12px;
+            border: none;
+            border-radius: 5px;
+            background: #1565c0;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0d47a1;
+        }
+
+        .small-button {
+            background: #6c757d;
+            padding: 7px 9px;
+        }
+
+        .delete-button {
+            background: #c62828;
+            padding: 7px 9px;
+        }
+
+        .solve-button {
+            margin-top: 15px;
+            width: 100%;
+            font-size: 16px;
+            padding: 12px;
+            background: #2e7d32;
+        }
+
+        .solve-button:hover {
+            background: #1b5e20;
+        }
+
+        .matrix-wrapper {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            background: white;
+            margin-bottom: 25px;
+            width: 100%;
+            min-width: 600px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 7px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        th {
+            background: #f1f3f5;
+        }
+
+        .matrix-input {
+            width: 60px;
+            text-align: center;
+        }
+
+        .blocked-cell {
+            background: #ffe0e0;
+        }
+
+        .positive-cell {
+            background: #e8f5e9;
+            font-weight: bold;
+        }
+
+        .main-right {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Optymalizacja Transportu (Problem Pośrednika)</h2>
+
+    <div class="layout">
+        <div class="panel">
+            <div class="dashboard">
+                <h3 style="margin-top:0;">Dane wejściowe</h3>
+
+                <div>
+                    <div class="section-title">Dostawcy</div>
+                    <div id="suppliers-container"></div>
+                    <button class="small-button" onclick="addSupplier()">+ Dodaj dostawcę</button>
+                </div>
+
+                <div>
+                    <div class="section-title">Odbiorcy</div>
+                    <div id="receivers-container"></div>
+                    <button class="small-button" onclick="addReceiver()">+ Dodaj odbiorcę</button>
+                </div>
+
+                <div>
+                    <div class="section-title">Koszty transportu</div>
+                    <div id="costs-container"></div>
+                </div>
+
+                <button class="solve-button" onclick="solve()">Rozwiąż zagadnienie</button>
+
+                <h3>Podsumowanie Finansowe</h3>
+
+                <div class="stat-box revenue">
+                    <div class="stat-title">Całkowity Przychód</div>
+                    <div class="stat-value" id="val-revenue">0 zł</div>
+                </div>
+
+                <div class="stat-box cost">
+                    <div class="stat-title">Koszty Zakupu</div>
+                    <div class="stat-value" id="val-purchase">0 zł</div>
+                </div>
+
+                <div class="stat-box cost">
+                    <div class="stat-title">Koszty Transportu</div>
+                    <div class="stat-value" id="val-transport">0 zł</div>
+                </div>
+
+                <div class="stat-box profit">
+                    <div class="stat-title">Zysk rozwiązania</div>
+                    <div class="stat-value" id="val-profit">0 zł</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-right">
+            <div id="mynetwork"></div>
+
+            <div class="panel">
+                <h3>Macierze</h3>
+                <div id="matrices"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let suppliers = [
+            { name: "Hurtownia Alfa", supply: 200, buyPrice: 10 },
+            { name: "Hurtownia Beta", supply: 150, buyPrice: 12 },
+            { name: "Hurtownia Gamma", supply: 300, buyPrice: 11 },
+            { name: "Hurtownia Delta", supply: 100, buyPrice: 15 },
+            { name: "Hurtownia Epsilon", supply: 250, buyPrice: 13 }
+        ];
+
+        let receivers = [
+            { name: "Sklep Wwa", demand: 120, sellPrice: 30 },
+            { name: "Sklep Krk", demand: 180, sellPrice: 32 },
+            { name: "Sklep Poz", demand: 100, sellPrice: 29 },
+            { name: "Sklep Wroc", demand: 250, sellPrice: 35 },
+            { name: "Sklep Gdn", demand: 150, sellPrice: 31 },
+            { name: "Sklep Łódź", demand: 250, sellPrice: 33 }
+        ];
+
+        let transportCosts = [
+            [4, 5, 6, 8, 3, 4],
+            [2, 4, 3, 5, 7, 2],
+            [6, 3, 5, 2, 4, 6],
+            [8, 7, 4, 6, 5, 3],
+            [3, 6, 7, 4, 3, 5]
+        ];
+
+        let blockedRoutes = [];
+
+        let network = null;
+
+        function isRouteBlocked(i, j) {
+            return blockedRoutes.some(route => route[0] === i && route[1] === j);
+        }
+
+        function toggleBlockedRoute(i, j, checked) {
+            if (checked) {
+                if (!isRouteBlocked(i, j)) {
+                    blockedRoutes.push([i, j]);
+                }
+            } else {
+                blockedRoutes = blockedRoutes.filter(route => !(route[0] === i && route[1] === j));
+            }
+
+            renderCostsTable();
+        }
+
+        function syncCostMatrixSize() {
+            while (transportCosts.length < suppliers.length) {
+                transportCosts.push(new Array(receivers.length).fill(0));
+            }
+
+            while (transportCosts.length > suppliers.length) {
+                transportCosts.pop();
+            }
+
+            for (let i = 0; i < transportCosts.length; i++) {
+                while (transportCosts[i].length < receivers.length) {
+                    transportCosts[i].push(0);
+                }
+
+                while (transportCosts[i].length > receivers.length) {
+                    transportCosts[i].pop();
+                }
+            }
+        }
+
+        function renderInputs() {
+            syncCostMatrixSize();
+
+            const suppliersContainer = document.getElementById('suppliers-container');
+            suppliersContainer.innerHTML = '';
+
+            suppliers.forEach((supplier, index) => {
+                const row = document.createElement('div');
+                row.className = 'row';
+
+                row.innerHTML = `
+                    <input value="${supplier.name}" onchange="suppliers[${index}].name = this.value; renderCostsTable();">
+                    <input type="number" value="${supplier.supply}" onchange="suppliers[${index}].supply = Number(this.value);">
+                    <input type="number" value="${supplier.buyPrice}" onchange="suppliers[${index}].buyPrice = Number(this.value);">
+                    <button class="delete-button" onclick="removeSupplier(${index})">×</button>
+                `;
+
+                suppliersContainer.appendChild(row);
+            });
+
+            const receiversContainer = document.getElementById('receivers-container');
+            receiversContainer.innerHTML = '';
+
+            receivers.forEach((receiver, index) => {
+                const row = document.createElement('div');
+                row.className = 'receiver-row';
+
+                row.innerHTML = `
+                    <input value="${receiver.name}" onchange="receivers[${index}].name = this.value; renderCostsTable();">
+                    <input type="number" value="${receiver.demand}" onchange="receivers[${index}].demand = Number(this.value);">
+                    <input type="number" value="${receiver.sellPrice}" onchange="receivers[${index}].sellPrice = Number(this.value);">
+                    <button class="delete-button" onclick="removeReceiver(${index})">×</button>
+                `;
+
+                receiversContainer.appendChild(row);
+            });
+
+            renderCostsTable();
+        }
+
+        function renderCostsTable() {
+            syncCostMatrixSize();
+
+            const container = document.getElementById('costs-container');
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Dostawca / Odbiorca</th>
+            `;
+
+            receivers.forEach(receiver => {
+                html += `<th>${receiver.name}</th>`;
+            });
+
+            html += `
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            suppliers.forEach((supplier, i) => {
+                html += `<tr><th>${supplier.name}</th>`;
+
+                receivers.forEach((receiver, j) => {
+                    const blocked = isRouteBlocked(i, j);
+
+                    html += `
+                        <td class="${blocked ? 'blocked-cell' : ''}">
+                            <input 
+                                class="matrix-input"
+                                type="number"
+                                value="${transportCosts[i][j]}"
+                                ${blocked ? 'disabled' : ''}
+                                onchange="transportCosts[${i}][${j}] = Number(this.value);"
+                            >
+                            <div style="font-size: 11px; margin-top: 4px;">
+                                <label>
+                                    <input 
+                                        type="checkbox"
+                                        ${blocked ? 'checked' : ''}
+                                        onchange="toggleBlockedRoute(${i}, ${j}, this.checked);"
+                                    >
+                                    blok
+                                </label>
+                            </div>
+                        </td>
+                    `;
+                });
+
+                html += `</tr>`;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function addSupplier() {
+            suppliers.push({
+                name: `Dostawca ${suppliers.length + 1}`,
+                supply: 0,
+                buyPrice: 0
+            });
+
+            syncCostMatrixSize();
+            renderInputs();
+        }
+
+        function addReceiver() {
+            receivers.push({
+                name: `Odbiorca ${receivers.length + 1}`,
+                demand: 0,
+                sellPrice: 0
+            });
+
+            syncCostMatrixSize();
+            renderInputs();
+        }
+
+        function removeSupplier(index) {
+            suppliers.splice(index, 1);
+            transportCosts.splice(index, 1);
+            blockedRoutes = [];
+            renderInputs();
+        }
+
+        function removeReceiver(index) {
+            receivers.splice(index, 1);
+
+            for (let i = 0; i < transportCosts.length; i++) {
+                transportCosts[i].splice(index, 1);
+            }
+
+            blockedRoutes = [];
+            renderInputs();
+        }
+
+        async function solve() {
+            const payload = {
+                suppliers,
+                receivers,
+                transportCosts,
+                blockedRoutes
+            };
+
+            const response = await fetch('/solve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert('Błąd: ' + result.error);
+                console.error(result);
+                return;
+            }
+
+            renderFinancials(result.financials);
+            renderGraph(result.nodesData, result.edgesData);
+            renderMatrices(result);
+        }
+
+        function renderFinancials(financials) {
+            document.getElementById('val-revenue').innerText = financials.totalRevenue + ' zł';
+            document.getElementById('val-purchase').innerText = financials.totalPurchaseCost + ' zł';
+            document.getElementById('val-transport').innerText = financials.totalTransportCost + ' zł';
+            document.getElementById('val-profit').innerText = financials.totalProfit + ' zł';
+        }
+
+        function renderGraph(nodesData, edgesData) {
+            const container = document.getElementById('mynetwork');
+
+            const nodes = new vis.DataSet(nodesData);
+            const edges = new vis.DataSet(edgesData);
+
+            const options = {
+                layout: { hierarchical: false },
+                physics: false,
+                edges: {
+                    selectionWidth: 3
+                },
+                interaction: {
+                    dragNodes: true,
+                    selectConnectedEdges: true
+                }
+            };
+
+            network = new vis.Network(container, { nodes, edges }, options);
+
+            network.once('afterDrawing', function () {
+                network.fit({ animation: { duration: 800 } });
+            });
+        }
+
+        function renderMatrices(result) {
+            const container = document.getElementById('matrices');
+
+            container.innerHTML = `
+                ${buildMatrixHtml(
+                    "Macierz kosztów transportu k_ij",
+                    result.suppliers,
+                    result.receivers,
+                    result.transportMatrix,
+                    "zł"
+                )}
+
+                ${buildMatrixHtml(
+                    "Macierz zysków jednostkowych c_ij = cena sprzedaży - cena zakupu - koszt transportu",
+                    result.suppliers,
+                    result.receivers,
+                    result.profitMatrix,
+                    "zł"
+                )}
+
+                ${buildMatrixHtml(
+                    "Macierz rozwiązania x_ij",
+                    result.suppliers,
+                    result.receivers,
+                    result.solutionMatrix,
+                    "szt."
+                )}
+            `;
+        }
+
+        function buildMatrixHtml(title, suppliers, receivers, matrix, unit) {
+            let html = `
+                <div class="matrix-wrapper">
+                    <h4>${title}</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dostawca / Odbiorca</th>
+            `;
+
+            receivers.forEach(receiver => {
+                html += `<th>${receiver.name}</th>`;
+            });
+
+            html += `
+                                <th>Podaż</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            suppliers.forEach((supplier, i) => {
+                html += `<tr><th>${supplier.name}</th>`;
+
+                receivers.forEach((receiver, j) => {
+                    const value = matrix[i]?.[j] ?? 0;
+                    const cellClass = value > 0 ? 'positive-cell' : '';
+
+                    html += `<td class="${cellClass}">${value} ${unit}</td>`;
+                });
+
+                html += `<td><strong>${supplier.supply}</strong></td>`;
+                html += `</tr>`;
+            });
+
+            html += `
+                        <tr>
+                            <th>Popyt</th>
+            `;
+
+            receivers.forEach(receiver => {
+                html += `<td><strong>${receiver.demand}</strong></td>`;
+            });
+
+            html += `
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+            `;
+
+            return html;
+        }
+
+        renderInputs();
+        solve();
+    </script>
+</body>
+</html>
