@@ -37,7 +37,7 @@ function StatCard({
 
 export function FinancialSummary({ financials }: FinancialSummaryProps) {
   const fmt = (n: number | undefined) =>
-    n !== undefined ? `${n.toLocaleString("pl-PL")} zł` : "—";
+    n !== undefined ? `${n.toLocaleString("pl-PL")} zł` : "-";
 
   return (
     <Panel title="Podsumowanie">

@@ -18,7 +18,7 @@ interface MatrixTableProps {
   highlightPositive?: boolean;
 }
 
-function MatrixTable({
+export function MatrixTable({
   title,
   suppliers,
   receivers,

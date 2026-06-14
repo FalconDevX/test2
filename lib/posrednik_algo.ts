@@ -1,4 +1,11 @@
-import type { Supplier, Receiver, Route, Financials } from "./types";
+import type {
+  Supplier,
+  Receiver,
+  Route,
+  Financials,
+  ModiIteration,
+  MatrixCell,
+} from "./types";
 
 function getCycleCells(cells: { r: number; c: number }[], M: number, N: number) {
   let candidates = [...cells];
@@ -52,6 +59,72 @@ function orderCycle(
   return cycle;
 }
 
+function cloneMatrix(matrix: number[][]): number[][] {
+  return matrix.map((row) => [...row]);
+}
+
+function computeFinancials(
+  allocations: number[][],
+  workSuppliers: Supplier[],
+  workReceivers: Receiver[],
+  workCosts: number[][]
+): Financials {
+  let totalPurchaseCost = 0;
+  let totalTransportCost = 0;
+  let totalRevenue = 0;
+
+  for (let r = 0; r < allocations.length; r++) {
+    for (let c = 0; c < allocations[r].length; c++) {
+      const amount = allocations[r][c];
+      if (amount <= 0) continue;
+
+      const s = workSuppliers[r];
+      const receiver = workReceivers[c];
+      if (s.isDummy || receiver.isDummy) continue;
+
+      totalPurchaseCost += amount * s.buyPrice;
+      totalTransportCost += amount * (workCosts[r]?.[c] ?? 0);
+      totalRevenue += amount * receiver.sellPrice;
+    }
+  }
+
+  return {
+    totalPurchaseCost,
+    totalTransportCost,
+    totalRevenue,
+    totalProfit: totalRevenue - totalPurchaseCost - totalTransportCost,
+  };
+}
+
+function buildDeltaMatrix(
+  profit: number[][],
+  u: (number | null)[],
+  v: (number | null)[],
+  basicCells: { r: number; c: number }[],
+  isBlocked: (r: number, c: number) => boolean
+): MatrixCell[][] {
+  const M = profit.length;
+  const N = profit[0]?.length ?? 0;
+  const delta: MatrixCell[][] = [];
+
+  for (let r = 0; r < M; r++) {
+    delta[r] = [];
+    for (let c = 0; c < N; c++) {
+      if (isBlocked(r, c)) {
+        delta[r][c] = "X";
+      } else if (basicCells.some((b) => b.r === r && b.c === c)) {
+        delta[r][c] = 0;
+      } else {
+        const ui = u[r] ?? 0;
+        const vj = v[c] ?? 0;
+        delta[r][c] = profit[r][c] - ui - vj;
+      }
+    }
+  }
+
+  return delta;
+}
+
 function solveIntermediary(
   suppliers: Supplier[],
   receivers: Receiver[],
@@ -63,6 +136,7 @@ function solveIntermediary(
   receivers: Receiver[];
   activeRoutes: Route[];
   financials: Financials;
+  iterations: ModiIteration[];
 } {
   const workSuppliers: Supplier[] = suppliers.map((s) => ({ ...s }));
   const workReceivers: Receiver[] = receivers.map((r) => ({ ...r }));
@@ -106,7 +180,6 @@ function solveIntermediary(
   const profit = Array(M)
     .fill(0)
     .map(() => Array(N).fill(0));
-  const possibleRoutes: { r: number; c: number; p: number }[] = [];
 
   for (let r = 0; r < M; r++) {
     for (let c = 0; c < N; c++) {
@@ -125,11 +198,8 @@ function solveIntermediary(
           workSuppliers[r].buyPrice -
           (workCosts[r][c] ?? 0);
       }
-      possibleRoutes.push({ r, c, p: profit[r][c] });
     }
   }
-
-  possibleRoutes.sort((a, b) => b.p - a.p);
   const allocations = Array(M)
     .fill(0)
     .map(() => Array(N).fill(0));
@@ -138,19 +208,81 @@ function solveIntermediary(
   const currentSupply = workSuppliers.map((s) => s.supply);
   const currentDemand = workReceivers.map((r) => r.demand);
 
-  for (const route of possibleRoutes) {
-    const { r, c } = route;
-    if (currentSupply[r] > 0 && currentDemand[c] > 0) {
-      const amount = Math.min(currentSupply[r], currentDemand[c]);
-      allocations[r][c] += amount;
+  const addBasicCell = (r: number, c: number) => {
+    if (!basicCells.some((b) => b.r === r && b.c === c)) {
       basicCells.push({ r, c });
-      currentSupply[r] -= amount;
-      currentDemand[c] -= amount;
+    }
+  };
+
+  const allocateInitial = (r: number, c: number) => {
+    if (isBlocked(r, c)) return;
+    if (currentSupply[r] <= 0 || currentDemand[c] <= 0) return;
+
+    const amount = Math.min(currentSupply[r], currentDemand[c]);
+    allocations[r][c] += amount;
+    addBasicCell(r, c);
+    currentSupply[r] -= amount;
+    currentDemand[c] -= amount;
+  };
+
+  const receiversWithBlocks: number[] = [];
+  for (let c = 0; c < N; c++) {
+    if (workReceivers[c].isDummy) continue;
+    for (let r = 0; r < M; r++) {
+      if (workSuppliers[r].isDummy) continue;
+      if (isBlocked(r, c)) {
+        receiversWithBlocks.push(c);
+        break;
+      }
     }
   }
 
+  for (const c of receiversWithBlocks) {
+    for (let r = 0; r < M; r++) {
+      if (workSuppliers[r].isDummy) continue;
+      allocateInitial(r, c);
+    }
+  }
+
+  let nwI = 0;
+  let nwJ = 0;
+  while (nwI < M && nwJ < N) {
+    if (currentSupply[nwI] <= 0) {
+      nwI++;
+      continue;
+    }
+    if (currentDemand[nwJ] <= 0) {
+      nwJ++;
+      continue;
+    }
+    if (isBlocked(nwI, nwJ)) {
+      nwJ++;
+      continue;
+    }
+
+    allocateInitial(nwI, nwJ);
+
+    if (currentSupply[nwI] <= 0) nwI++;
+    if (currentDemand[nwJ] <= 0) nwJ++;
+  }
+
+  for (let c = 0; c < N; c++) {
+    if (!workReceivers[c].isDummy && currentDemand[c] > 0) {
+      allocateInitial(dummySupplierIdx, c);
+    }
+  }
+
+  for (let r = 0; r < M; r++) {
+    if (!workSuppliers[r].isDummy && currentSupply[r] > 0) {
+      allocateInitial(r, dummyReceiverIdx);
+    }
+  }
+
+  allocateInitial(dummySupplierIdx, dummyReceiverIdx);
+
   for (let r = 0; r < M && basicCells.length < M + N - 1; r++) {
     for (let c = 0; c < N && basicCells.length < M + N - 1; c++) {
+      if (isBlocked(r, c)) continue;
       if (!basicCells.some((b) => b.r === r && b.c === c)) {
         if (!hasCycle([...basicCells, { r, c }], M, N)) {
           basicCells.push({ r, c });
@@ -159,6 +291,36 @@ function solveIntermediary(
     }
   }
 
+  const iterations: ModiIteration[] = [];
+  const academicSuppliers = workSuppliers.map((s) => ({ ...s }));
+  const academicReceivers = workReceivers.map((r) => ({ ...r }));
+
+  const pushIteration = (
+    step: number,
+    label: string,
+    extra: Partial<ModiIteration> = {}
+  ) => {
+    iterations.push({
+      step,
+      label,
+      suppliers: academicSuppliers.map((s) => ({ ...s })),
+      receivers: academicReceivers.map((r) => ({ ...r })),
+      solutionMatrix: cloneMatrix(allocations),
+      ...extra,
+    });
+  };
+
+  pushIteration(0, "Rozwiązanie początkowe (metoda NW)", {
+    financials: computeFinancials(
+      allocations,
+      workSuppliers,
+      workReceivers,
+      workCosts
+    ),
+  });
+
+  let modiRound = 0;
+  let stepCounter = 1;
   const MAX_ITER = 1000;
   for (let iter = 0; iter < MAX_ITER; iter++) {
     const u = Array(M).fill(null) as (number | null)[];
@@ -185,6 +347,7 @@ function solveIntermediary(
 
     for (let r = 0; r < M; r++) {
       for (let c = 0; c < N; c++) {
+        if (isBlocked(r, c)) continue;
         if (!basicCells.some((b) => b.r === r && b.c === c)) {
           const ui = u[r] ?? 0;
           const vj = v[c] ?? 0;
@@ -198,7 +361,34 @@ function solveIntermediary(
       }
     }
 
-    if (bestDelta <= 1e-9) break;
+    modiRound++;
+    pushIteration(
+      stepCounter++,
+      `Iteracja ${modiRound} - obliczenie α, β i wskaźników Δ`,
+      {
+        alpha: [...u],
+        beta: [...v],
+        deltaMatrix: buildDeltaMatrix(profit, u, v, basicCells, isBlocked),
+        bestDelta,
+        enteringCell:
+          bestDelta > 1e-9
+            ? { supplierIdx: enterR, receiverIdx: enterC }
+            : null,
+        financials: computeFinancials(
+          allocations,
+          workSuppliers,
+          workReceivers,
+          workCosts
+        ),
+      }
+    );
+
+    if (bestDelta <= 1e-9) {
+      const last = iterations[iterations.length - 1];
+      last.isFinal = true;
+      last.label = `Iteracja ${modiRound} - optymalność (brak dodatniego Δ)`;
+      break;
+    }
 
     const cycleCells = getCycleCells(
       [...basicCells, { r: enterR, c: enterC }],
@@ -228,6 +418,34 @@ function solveIntermediary(
     basicCells.push({ r: enterR, c: enterC });
     basicCells = basicCells.filter(
       (b) => !(b.r === leavingCell!.r && b.c === leavingCell!.c)
+    );
+
+    pushIteration(
+      stepCounter++,
+      `Iteracja ${modiRound} - macierz po przesunięciu (θ = ${minAmount})`,
+      {
+        bestDelta,
+        enteringCell: { supplierIdx: enterR, receiverIdx: enterC },
+        shiftAmount: minAmount,
+        financials: computeFinancials(
+          allocations,
+          workSuppliers,
+          workReceivers,
+          workCosts
+        ),
+      }
+    );
+  }
+
+  if (iterations.length > 0 && !iterations[iterations.length - 1].isFinal) {
+    const last = iterations[iterations.length - 1];
+    last.isFinal = true;
+    last.label = `Wynik końcowy - ${last.label}`;
+    last.financials = computeFinancials(
+      allocations,
+      workSuppliers,
+      workReceivers,
+      workCosts
     );
   }
 
@@ -295,6 +513,7 @@ function solveIntermediary(
       totalRevenue,
       totalProfit,
     },
+    iterations,
   };
 }
 

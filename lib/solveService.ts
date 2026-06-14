@@ -156,5 +156,6 @@ export function solveProblem(input: SolveInput): SolveResult {
     ...result,
     ...graphData,
     ...matrixData,
+    iterations: result.iterations,
   };
 }

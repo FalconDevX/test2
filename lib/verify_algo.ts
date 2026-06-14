@@ -150,7 +150,42 @@ const tests: { name: string; run: () => void }[] = [
     },
   },
   {
-    name: "Domyślne dane — zgodność z Excel (Pośrednik.xlsx)",
+    name: "Blokada trasy - deficyt przez dostawcę fikcyjnego, nie przez Of",
+    run: () => {
+      const result = solveIntermediary(
+        mkSuppliers(DEFAULT_SUPPLIERS),
+        mkReceivers(DEFAULT_RECEIVERS),
+        DEFAULT_TRANSPORT_COSTS,
+        [[1, 2]]
+      );
+
+      verifyInvariants(result, [[1, 2]]);
+      verifyFinancials(result);
+
+      const matrix = Array.from({ length: result.suppliers.length }, () =>
+        Array(result.receivers.length).fill(0)
+      );
+      for (const route of result.activeRoutes) {
+        matrix[route.supplierIdx][route.receiverIdx] = route.amount;
+      }
+
+      const betaIdx = result.suppliers.findIndex((s) => s.name.includes("Beta"));
+      const pozIdx = result.receivers.findIndex((r) => r.name.includes("Poz"));
+      const hfIdx = result.suppliers.findIndex((s) => s.isDummy);
+
+      assert(matrix[betaIdx][pozIdx] === 0, "Zablokowana trasa Beta→Poz nie może być użyta");
+      assert(
+        hfIdx >= 0 && matrix[hfIdx][pozIdx] === 17,
+        "Brakujący popyt Poz powinien zaspokoić dostawca fikcyjny"
+      );
+      const pozColSum = result.activeRoutes
+        .filter((r) => r.receiverIdx === pozIdx)
+        .reduce((sum, r) => sum + r.amount, 0);
+      assert(pozColSum === 27, "Kolumna Poz powinna sumować się do 27");
+    },
+  },
+  {
+    name: "Domyślne dane - zgodność z Excel (Pośrednik.xlsx)",
     run: () => {
       const result = solveIntermediary(
         mkSuppliers(DEFAULT_SUPPLIERS),

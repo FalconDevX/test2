@@ -70,6 +70,22 @@ export interface VisEdge {
 
 export type MatrixCell = number | string;
 
+export interface ModiIteration {
+  step: number;
+  label: string;
+  suppliers: Supplier[];
+  receivers: Receiver[];
+  solutionMatrix: number[][];
+  alpha?: (number | null)[];
+  beta?: (number | null)[];
+  deltaMatrix?: MatrixCell[][];
+  bestDelta?: number | null;
+  enteringCell?: { supplierIdx: number; receiverIdx: number } | null;
+  shiftAmount?: number | null;
+  financials?: Financials;
+  isFinal?: boolean;
+}
+
 export interface SolveResult {
   suppliers: Supplier[];
   receivers: Receiver[];
@@ -80,4 +96,5 @@ export interface SolveResult {
   transportMatrix: number[][];
   profitMatrix: MatrixCell[][];
   solutionMatrix: number[][];
+  iterations: ModiIteration[];
 }

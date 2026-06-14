@@ -15,6 +15,7 @@ import { ReceiverForm } from "./ReceiverForm";
 import { CostMatrix } from "./CostMatrix";
 import { FinancialSummary } from "./FinancialSummary";
 import { NetworkGraph } from "./NetworkGraph";
+import { IterationSteps } from "./IterationSteps";
 import { ResultMatrices } from "./ResultMatrices";
 import { DataToolbar } from "./DataToolbar";
 import { Button, Panel } from "./ui";
@@ -179,7 +180,7 @@ export function SolverApp() {
               Pośrednik
             </h1>
             <p className="mt-0.5 text-xs text-muted">
-              Optymalizacja transportu · algorytm zachłanny
+              Optymalizacja transportu · metoda potencjałów (MODI)
             </p>
           </div>
           <div className="hidden items-center gap-2 sm:flex">
@@ -252,13 +253,16 @@ export function SolverApp() {
           />
 
           {result && (
-            <ResultMatrices
-              suppliers={result.suppliers}
-              receivers={result.receivers}
-              transportMatrix={result.transportMatrix}
-              profitMatrix={result.profitMatrix}
-              solutionMatrix={result.solutionMatrix}
-            />
+            <>
+              <IterationSteps iterations={result.iterations ?? []} />
+              <ResultMatrices
+                suppliers={result.suppliers}
+                receivers={result.receivers}
+                transportMatrix={result.transportMatrix}
+                profitMatrix={result.profitMatrix}
+                solutionMatrix={result.solutionMatrix}
+              />
+            </>
           )}
         </div>
       </main>
